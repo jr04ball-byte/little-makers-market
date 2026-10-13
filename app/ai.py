@@ -72,10 +72,13 @@ Return ONLY JSON:
  "title": str,                       // e.g. "Sparky the Three-Legged Dragon"
  "story": str,                       // 50-80 word origin story, told like a picture book, based on the kid's answers
  "tagline": str,                     // max 10 words
- "products": {
-   "plush3d": {"name": str, "description": str, "price_cents": int},   // digital 3D plush model (AR + download), suggest 300-700
-   "sticker": {"name": str, "description": str, "price_cents": int},   // die-cut vinyl sticker, suggest 300-600
-   "print":   {"name": str, "description": str, "price_cents": int}    // 8x10 art print, suggest 1200-2500
+ "products": {                       // short, warm product copy (prices are set by the shop, not you)
+   "plush3d": {"name": str, "description": str},   // digital 3D plush model (view in AR + printable file)
+   "sticker": {"name": str, "description": str},   // 3x4" die-cut vinyl sticker
+   "mug":     {"name": str, "description": str},   // 11oz ceramic mug, character on both sides
+   "print":   {"name": str, "description": str},   // 8x10 fine-art print of the original drawing
+   "pillow":  {"name": str, "description": str},   // 18x18" faux-suede pillow
+   "blanket": {"name": str, "description": str}    // 50x60" fleece blanket with a pattern of the character
  },
  "coach_line": str                   // one sentence the money coach could say to the kid when the first item sells
 }"""

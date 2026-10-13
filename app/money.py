@@ -5,7 +5,7 @@ import time
 
 from fastapi import HTTPException
 
-from . import config, db, paypal
+from . import catalog, config, db, media, paypal, prodigi
 
 PAID_BUCKETS = ("save", "spend", "give")
 
@@ -49,7 +49,8 @@ def create_checkout(items, message: str = "", channel: str = "web", agent_name: 
         titles.append(p["title"])
         lines.append({"product_id": p["id"], "creation_id": p["creation_id"], "name": f"{p['title']} — {p['name']}",
                       "description": p["description"], "sku": p["id"], "unit_cents": p["price_cents"],
-                      "quantity": it.quantity, "category": "PHYSICAL_GOODS" if p["physical"] else "DIGITAL_GOODS"})
+                      "quantity": it.quantity, "kind": p["kind"],
+                      "category": "PHYSICAL_GOODS" if p["physical"] else "DIGITAL_GOODS"})
     shop = db.row("SELECT * FROM shops WHERE id = ?", shop_id)
     oid = db.new_id("ord")
     physical = any(l["category"] == "PHYSICAL_GOODS" for l in lines)
@@ -88,6 +89,7 @@ def record_capture(o: dict, res: dict) -> dict:
         net = cap.get("seller_receivable_breakdown", {}).get("net_amount")
         net_cents = int(round(float(net["value"]) * 100)) if net else gross
         split_order(o, gross, net_cents)
+        fulfill(o, res)
         first = (name.split(" ")[0] if name else "Someone")
         db.log_event(o["shop_id"], "sale", f"{first} bought {len(db.loads(o['items'], []))} item(s) for {dollars(gross)}"
                      + (f" via {o['agent_name'] or 'an AI agent'}" if o["channel"] == "agent" else ""),
@@ -104,6 +106,8 @@ def split_order(o: dict, gross: int, net: int) -> None:
     for it in items:
         line_gross = it["unit_cents"] * it["quantity"]
         share = round(net * line_gross / gross) if gross else 0
+        # the print shop is paid first: making + shipping the physical item
+        share = max(0, share - catalog.PRODUCTS.get(it.get("kind"), {}).get("cost_cents", 0) * it["quantity"])
         c = db.row("SELECT maker_id, title FROM creations WHERE id = ?", it["creation_id"])
         maker = db.row("SELECT * FROM makers WHERE id = ?", c["maker_id"])
         cause = round(share * (shop["cause_pct"] or 0) / 100) if shop["kind"] == "fundraiser" else 0
@@ -146,6 +150,12 @@ def refund_order(order_id: str, reason: str = "") -> dict:
         raise HTTPException(404, "Order not found or not paid")
     r = paypal.refund_capture(o["capture_id"], note=reason or "Refund from Little Makers Market")
     reverse_ledger(o)
+    if o.get("fulfillment_id") and prodigi.enabled():  # stop the print job if it hasn't shipped
+        try:
+            prodigi._call("POST", f"/orders/{o['fulfillment_id']}/actions/cancel")
+            db.update("orders", o["id"], {"fulfillment_status": "Cancelled (refunded)"})
+        except prodigi.ProdigiError as e:
+            db.log_event(o["shop_id"], "print", f"Couldn't cancel the print order: {str(e)[:120]}")
     db.update("orders", o["id"], {"status": "REFUNDED"})
     return r
 
@@ -256,3 +266,46 @@ def split_club_payment(sub: dict, cents: int) -> None:
             db.insert("ledger", {"order_id": None, "shop_id": sub["shop_id"], "maker_id": m["id"], "bucket": b,
                                  "cents": c, "note": "Grandparent Club", "created": time.time()})
     db.log_event(sub["shop_id"], "club", f"Grandparent Club payment of {dollars(cents)} shared by {len(makers)} makers")
+
+
+# ------------------------------------------------------------------ print-on-demand fulfillment (Prodigi)
+
+def fulfill(o: dict, capture: dict) -> None:
+    """Send the physical items of a paid order to the print shop. Never breaks the payment flow."""
+    lines = [l for l in db.loads(o["items"], []) if catalog.PRODUCTS.get(l.get("kind"), {}).get("physical")]
+    if not lines or not prodigi.enabled():
+        return
+    pu = (capture.get("purchase_units") or [{}])[0]
+    recipient = prodigi.recipient_from_paypal(pu, capture.get("payer", {}))
+    if not recipient:  # capture responses don't always echo the address; the order does
+        full = paypal.get_order(o["paypal_order_id"])
+        recipient = prodigi.recipient_from_paypal((full.get("purchase_units") or [{}])[0], full.get("payer", {}))
+    if not recipient:
+        db.update("orders", o["id"], {"fulfillment_status": "Waiting for a shipping address"})
+        return
+    try:
+        items = []
+        for l in lines:
+            spec = catalog.PRODUCTS[l["kind"]]
+            path = media.print_file(l["creation_id"], l["kind"])
+            items.append({"reference": l["product_id"], "sku": spec["sku"], "copies": l["quantity"],
+                          "attributes": spec.get("attributes"),
+                          "asset_url": f"{config.PUBLIC_URL}/media/{path.relative_to(config.MEDIA_DIR).as_posix()}"})
+        order = prodigi.create_order(o["id"], recipient, items)
+        status = prodigi.describe(order)
+        db.update("orders", o["id"], {"fulfillment_id": order["id"], "fulfillment_status": status,
+                                      "ship_to": f"{recipient['address']['townOrCity']}, {recipient['address']['stateOrCounty']}"})
+        db.log_event(o["shop_id"], "print", f"{len(lines)} item(s) sent to the print shop (Prodigi {order['id']})")
+    except Exception as e:  # payment already succeeded; surface the problem instead of failing the request
+        db.update("orders", o["id"], {"fulfillment_status": f"Print order failed: {str(e)[:120]}"})
+        db.log_event(o["shop_id"], "print", "Print order failed — retry from the dashboard")
+
+
+def refresh_fulfillment(prodigi_id: str) -> str | None:
+    o = db.row("SELECT * FROM orders WHERE fulfillment_id = ?", prodigi_id)
+    if not o or not prodigi.enabled():
+        return None
+    status = prodigi.describe(prodigi.get_order(prodigi_id))
+    if status != o["fulfillment_status"]:
+        db.update("orders", o["id"], {"fulfillment_status": status})
+    return status

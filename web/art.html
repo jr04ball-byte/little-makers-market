@@ -33,9 +33,15 @@
       <input id="note" maxlength="200" placeholder="Sparky is my favorite! Love, Grandma">
       <div class="row" style="margin-top:14px"><b class="grow" style="font-size:1.3rem" id="total"></b><span class="small muted" id="cause-note"></span></div>
       <div id="paypal-buttons"></div>
-      <p class="small muted">Sandbox demo — use a PayPal sandbox buyer account. No real money moves.</p>
+      <p class="small muted">Physical items are printed and shipped by our print shop (Prodigi). Sandbox demo — use a PayPal sandbox buyer account; no real money moves and nothing ships.</p>
     </div>
   </div>
+
+  <section class="card" style="margin-top:28px" id="specialists">
+    <h3>🎁 Want something extra special?</h3>
+    <p class="small muted">Everything above is printed and shipped for you by our print shop. These specialists make one-of-a-kind keepsakes — you order directly from them (they take PayPal).</p>
+    <div class="grid" id="spec-list" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))"></div>
+  </section>
 
   <section class="card hidden" id="done" style="margin-top:28px;text-align:center">
     <div style="font-size:3rem">🎉</div>
@@ -48,7 +54,6 @@
 topbar();
 const cid = slugFromPath();
 let art;
-const label = { plush3d: '🧸 3D plush — AR + printable file', sticker: '⭐ Die-cut vinyl sticker', print: '🖼️ 8×10 art print' };
 
 function cart() {
   return $$('#opts .opt').filter(o => $('input[type=checkbox]', o).checked)
@@ -69,7 +74,7 @@ function updateTotal() {
   $('#by').textContent = `${art.maker.emoji || '🎨'} by ${art.maker.nickname}${art.maker.age ? ', age ' + art.maker.age : ''}`;
   $('#title').textContent = art.title; $('#story').textContent = art.story;
   $('#quirks').innerHTML = art.quirks.map(q => `<span class="pill sun">✨ ${esc(q)}</span>`).join('');
-  const views = [['3D', null], ['Sticker', art.sticker], ['Print', art.print], ['Original', art.drawing]];
+  const views = [['3D', null], ['Sticker', art.sticker], ['Mug', art.mug], ['Print', art.print], ['Pillow', art.pillow], ['Blanket', art.blanket], ['Original', art.drawing]].filter(([n, src], i) => i === 0 || src);
   $('#views').innerHTML = views.map(([n, src], i) => `<button type="button" class="${i ? '' : 'on'}" data-i="${i}" title="${n}">
       ${src ? `<img src="${src}" alt="${n}">` : `<div style="aspect-ratio:1;display:grid;place-items:center;font-weight:800;background:var(--grape-2);border-radius:10px">🧸 3D</div>`}</button>`).join('');
   $('#views').onclick = e => {
@@ -80,9 +85,14 @@ function updateTotal() {
     $('#still').classList.toggle('hidden', !src);
     if (src) $('#still').src = src;
   };
+  const cfg = await ppConfig();
+  $('#spec-list').innerHTML = (cfg.specialists || []).map(x => `<div class="opt" style="display:block">
+      <b>${esc(x.name)}</b><div class="small muted" style="margin:4px 0 10px">${esc(x.what)}</div>
+      ${x.kind === 'figurine' ? `<a class="btn small alt" href="${art.stl}" download>⬇ Printable 3D file</a> ` : `<a class="btn small alt" href="${art.drawing}" download>⬇ Original drawing</a> `}
+      <a class="btn small" href="${x.url}" target="_blank" rel="noopener">Open ${esc(x.name)} ↗</a></div>`).join('');
   if (art.shop.kind === 'fundraiser') $('#cause-note').textContent = `💛 ${art.shop.cause_pct}% goes to ${art.shop.cause_name}`;
   $('#opts').innerHTML = art.products.map((p, i) => `<label class="opt" data-pid="${p.id}">
-      <input type="checkbox" ${i === 0 ? 'checked' : ''}><div class="grow"><b>${label[p.kind] || esc(p.name)}</b>
+      <input type="checkbox" ${i === 0 ? 'checked' : ''}><div class="grow"><b>${p.emoji} ${esc(p.label)}</b>
       <div class="small muted">${esc(p.description)}</div></div>
       <input class="qty" type="number" min="1" max="20" value="1" aria-label="Quantity"><span class="price">${money(p.price_cents)}</span></label>`).join('');
   $('#opts').oninput = updateTotal; updateTotal();

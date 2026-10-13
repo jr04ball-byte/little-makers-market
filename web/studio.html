@@ -82,7 +82,7 @@
         <div class="product">
           <div>
             <model-viewer id="w-model" camera-controls auto-rotate ar shadow-intensity="1" exposure="1.1" alt="3D plush"></model-viewer>
-            <div class="views"><button type="button" data-v="sticker"><img id="w-sticker" alt=""></button><button type="button" data-v="print"><img id="w-print" alt=""></button></div>
+            <div class="views" id="w-views"></div>
           </div>
           <div>
             <h2 id="w-title"></h2>
@@ -186,10 +186,10 @@ $('#w-answers').onsubmit = async e => {
 
 function showReady() {
   const c = current;
-  $('#w-model').src = c.model; $('#w-sticker').src = c.sticker; $('#w-print').src = c.print;
+  $('#w-model').src = c.model;
+  $('#w-views').innerHTML = ['sticker', 'mug', 'print', 'pillow', 'blanket'].filter(k => c[k]).map(k => `<button type="button" title="${k}"><img src="${c[k]}" alt="${k}"></button>`).join('');
   $('#w-title').textContent = c.title; $('#w-story').textContent = c.story;
-  const label = { plush3d: '🧸 3D plush (AR + printable file)', sticker: '⭐ Die-cut sticker', print: '🖼️ 8×10 art print' };
-  $('#w-products').innerHTML = c.products.map(p => `<div class="opt"><div class="grow"><b>${label[p.kind] || esc(p.name)}</b>
+  $('#w-products').innerHTML = c.products.map(p => `<div class="opt"><div class="grow"><b>${p.emoji} ${esc(p.label)}</b>
       <div class="small muted">${esc(p.description)}</div></div>
       <span>$</span><input class="qty" type="number" min="1" step="0.5" value="${(p.price_cents / 100).toFixed(2)}" data-pid="${p.id}"></div>`).join('');
   step(3);
@@ -199,7 +199,7 @@ $('#w-products').onchange = async e => {
   await api('/api/products/' + i.dataset.pid, { method: 'PATCH', json: { price_cents: Math.round(+i.value * 100) } });
   toast('Price saved');
 };
-$$('.views button').forEach(b => b.onclick = () => window.open(b.querySelector('img').src));
+$('#w-views').onclick = e => { const i = e.target.closest('button')?.querySelector('img'); if (i) window.open(i.src); };
 $('#w-publish').onclick = async () => {
   await api(`/api/creations/${current.id}/publish`, { method: 'POST' });
   confetti(); toast(`${current.title} is in the shop!`);

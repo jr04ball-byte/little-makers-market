@@ -35,7 +35,7 @@
 
   <section class="card" style="margin-top:22px;overflow-x:auto">
     <h2>Orders</h2>
-    <table><thead><tr><th>When</th><th>Buyer</th><th>Items</th><th>Total</th><th>Channel</th><th>Status</th></tr></thead><tbody id="orders"></tbody></table>
+    <table><thead><tr><th>When</th><th>Buyer</th><th>Items</th><th>Total</th><th>Channel</th><th>Payment</th><th>Print shop</th></tr></thead><tbody id="orders"></tbody></table>
   </section>
   <section class="card" style="margin-top:22px;overflow-x:auto">
     <h2>Payouts</h2>
@@ -68,8 +68,9 @@ async function load() {
     const items = JSON.parse(o.items || '[]');
     return `<tr><td>${when(o.created)}</td><td>${esc(o.buyer_name || '—')}</td><td>${items.map(i => `${i.quantity}× ${esc(i.name)}`).join('<br>')}</td>
       <td>${money(o.total_cents)}</td><td>${o.channel === 'agent' ? '🤖 ' + esc(o.agent_name || 'AI agent') : o.channel === 'assistant' ? '💬 link' : '🛒 web'}</td>
-      <td><span class="pill ${o.status === 'COMPLETED' ? 'leaf' : o.status === 'REFUNDED' ? 'tomato' : 'sun'}">${o.status}</span></td></tr>`;
-  }).join('') || '<tr><td colspan="6" class="muted">No orders yet.</td></tr>';
+      <td><span class="pill ${o.status === 'COMPLETED' ? 'leaf' : o.status === 'REFUNDED' ? 'tomato' : 'sun'}">${o.status}</span></td>
+      <td class="small">${o.fulfillment_status ? `🖨️ ${esc(o.fulfillment_status)}${o.ship_to ? `<div class="muted">→ ${esc(o.ship_to)}</div>` : ''}` : '<span class="muted">—</span>'}</td></tr>`;
+  }).join('') || '<tr><td colspan="7" class="muted">No orders yet.</td></tr>';
   $('#payouts').innerHTML = d.payouts.map(p => `<tr><td>${when(p.created)}</td><td>${esc(p.paypal_batch_id)}</td>
      <td>${JSON.parse(p.items).map(i => esc(i.receiver)).join('<br>')}</td><td>${money(p.total_cents)}</td><td>${esc(p.status)}</td></tr>`).join('')
      || '<tr><td colspan="5" class="muted">No payouts yet.</td></tr>';

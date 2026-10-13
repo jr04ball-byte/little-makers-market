@@ -37,3 +37,7 @@ services:
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false
+      - key: PRODIGI_ENV          # print-on-demand in test mode: orders are tracked, never charged or shipped
+        value: sandbox
+      - key: PRODIGI_API_KEY      # the SANDBOX key (starts with test_)
+        sync: false

@@ -75,9 +75,20 @@ def tx():
         con.close()
 
 
+MIGRATIONS = [
+    "ALTER TABLE orders ADD COLUMN fulfillment_id TEXT",
+    "ALTER TABLE orders ADD COLUMN fulfillment_status TEXT",
+    "ALTER TABLE orders ADD COLUMN ship_to TEXT",
+]
+
+
 def init() -> None:
     with tx() as con:
         con.executescript(SCHEMA)
+        have = {r[1] for r in con.execute("PRAGMA table_info(orders)")}
+        for m in MIGRATIONS:
+            if m.split(" ADD COLUMN ")[1].split()[0] not in have:
+                con.execute(m)
 
 
 def rows(sql: str, *args) -> list[dict]:

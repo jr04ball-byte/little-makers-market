@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
-from . import agents, ai, config, db, media, money, paypal
+from . import agents, ai, catalog, config, db, media, money, paypal, prodigi
 
 WEB = config.ROOT / "web"
 app = FastAPI(title="Little Makers Market")
@@ -59,10 +59,17 @@ def creation_view(c: dict, with_products: bool = True) -> dict:
     out["answers"] = db.loads(c["answers"], {})
     for k in ("drawing", "cutout", "model", "stl", "sticker", "print"):
         out[k] = media_url(c[k])
+    for k in ("mug", "pillow", "blanket"):  # mockups live next to the drawing
+        out[k] = media_url(f"{c['id']}/{k}.jpg") if (config.MEDIA_DIR / c["id"] / f"{k}.jpg").exists() else None
     maker = db.row("SELECT id, nickname, age, emoji FROM makers WHERE id = ?", c["maker_id"])
     out["maker"] = maker
     if with_products:
-        out["products"] = db.rows("SELECT * FROM products WHERE creation_id = ? AND active = 1 ORDER BY price_cents", c["id"])
+        rank = {k: i for i, k in enumerate(catalog.ORDER)}
+        prods = db.rows("SELECT * FROM products WHERE creation_id = ? AND active = 1", c["id"])
+        for p in prods:
+            spec = catalog.PRODUCTS.get(p["kind"], {})
+            p.update(label=spec.get("label", p["name"]), emoji=spec.get("emoji", "🎁"))
+        out["products"] = sorted(prods, key=lambda p: rank.get(p["kind"], 99))
     return out
 
 
@@ -175,15 +182,21 @@ def answer_questions(cid: str, body: AnswersIn):
     db.update("creations", cid, {"answers": body.answers, "character_name": listing.get("character_name"),
                                  "title": listing.get("title"), "story": listing.get("story"),
                                  "analysis": {**db.loads(c["analysis"], {}), "listing": listing}})
+    make_products(cid, listing, listing.get("character_name") or c["kind"] or "Creation")
+    return creation_view(db.row("SELECT * FROM creations WHERE id = ?", cid))
+
+
+def make_products(cid: str, listing: dict, character: str) -> None:
+    """One product per catalog item; prices cover the print shop's cost plus the kid's share."""
     with db.tx() as con:
         con.execute("DELETE FROM products WHERE creation_id = ?", (cid,))
-    for kind, physical in (("plush3d", 0), ("sticker", 1), ("print", 1)):
-        p = listing.get("products", {}).get(kind) or {}
-        price = int(p.get("price_cents") or {"plush3d": 500, "sticker": 400, "print": 1800}[kind])
+    for kind in catalog.ORDER:
+        spec = catalog.PRODUCTS[kind]
+        p = (listing.get("products") or {}).get(kind) or {}
         db.insert("products", {"id": db.new_id("prd"), "creation_id": cid, "kind": kind,
-                               "name": p.get("name") or kind, "description": p.get("description", ""),
-                               "price_cents": max(100, min(price, 5000)), "physical": physical})
-    return creation_view(db.row("SELECT * FROM creations WHERE id = ?", cid))
+                               "name": p.get("name") or f"{character} {spec['label'].split(' (')[0]}",
+                               "description": p.get("description") or spec["label"],
+                               "price_cents": spec["price_cents"], "physical": int(spec["physical"])})
 
 
 class ProductPatch(BaseModel):
@@ -194,6 +207,12 @@ class ProductPatch(BaseModel):
 @app.patch("/api/products/{pid}")
 def patch_product(pid: str, p: ProductPatch):
     data = {k: v for k, v in p.model_dump().items() if v is not None}
+    prod = db.row("SELECT kind FROM products WHERE id = ?", pid)
+    if not prod:
+        raise HTTPException(404)
+    floor = catalog.PRODUCTS.get(prod["kind"], {}).get("cost_cents", 0) + 100
+    if "price_cents" in data and data["price_cents"] < floor:
+        raise HTTPException(400, f"That price wouldn't cover making and shipping it — at least ${floor / 100:.2f}")
     if data:
         db.update("products", pid, data)
     return db.row("SELECT * FROM products WHERE id = ?", pid)
@@ -246,7 +265,18 @@ def checkout_capture(paypal_order_id: str):
 
 @app.get("/api/config")
 def public_config():
-    return {"paypal_client_id": config.PAYPAL_CLIENT_ID, "currency": config.CURRENCY, "env": config.PAYPAL_ENV}
+    return {"paypal_client_id": config.PAYPAL_CLIENT_ID, "currency": config.CURRENCY, "env": config.PAYPAL_ENV,
+            "specialists": catalog.SPECIALISTS, "print_shop": "Prodigi" if prodigi.enabled() else None}
+
+
+@app.post("/api/prodigi/callback")
+async def prodigi_callback(request: Request):
+    """Prodigi status callback. We never trust the payload: we re-read the order from Prodigi by id."""
+    event = await request.json()
+    pid = (event.get("data") or {}).get("order", {}).get("id") or event.get("subject")
+    if pid:
+        money.refresh_fulfillment(pid)
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ Grandparent Club (PayPal Subscriptions)
@@ -276,6 +306,13 @@ def run_payouts(slug: str):
 @app.get("/api/shops/{slug}/dashboard")
 def dashboard(slug: str):
     s = shop_by_slug(slug)
+    for o in db.rows("SELECT fulfillment_id FROM orders WHERE shop_id = ? AND fulfillment_id IS NOT NULL "
+                     "AND fulfillment_status NOT IN ('Shipped', 'Cancelled', 'Cancelled (refunded)') "
+                     "ORDER BY created DESC LIMIT 8", s["id"]):
+        try:
+            money.refresh_fulfillment(o["fulfillment_id"])
+        except prodigi.ProdigiError:
+            pass
     return {"shop": s, "stats": money.shop_stats(s["id"]),
             "orders": db.rows("SELECT * FROM orders WHERE shop_id = ? ORDER BY created DESC LIMIT 200", s["id"]),
             "ledger": db.rows("SELECT l.*, m.nickname FROM ledger l LEFT JOIN makers m ON m.id = l.maker_id "

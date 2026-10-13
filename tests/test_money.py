@@ -52,3 +52,13 @@ def test_refund_reverses_ledger_once():
     money.reverse_ledger(o)
     money.reverse_ledger(o)  # idempotent
     assert money.maker_with_balance(db.row("SELECT * FROM makers WHERE id = ?", mid))["earned_cents"] == 0
+
+
+def test_print_shop_cost_comes_out_before_the_kids_share():
+    sid, mid, cid = _shop()
+    oid = db.new_id("ord")
+    db.insert("orders", {"id": oid, "shop_id": sid, "status": "COMPLETED", "total_cents": 1900, "created": time.time(),
+                         "items": [{"creation_id": cid, "kind": "mug", "unit_cents": 1900, "quantity": 1}]})
+    money.split_order(db.row("SELECT * FROM orders WHERE id = ?", oid), gross=1900, net=1800)
+    m = money.maker_with_balance(db.row("SELECT * FROM makers WHERE id = ?", mid))
+    assert m["earned_cents"] == 1800 - 1218  # mug costs $12.18 to make and ship
