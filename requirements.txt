@@ -1,0 +1,14 @@
+fastapi>=0.143
+uvicorn[standard]
+httpx
+python-multipart
+openai>=1.0
+pillow
+numpy
+scipy
+scikit-image
+trimesh
+rembg[cpu]
+pydantic>=2.10
+requests
+python-dotenv
