@@ -1,6 +1,7 @@
 fastapi>=0.143
 uvicorn[standard]
 httpx
+paypal-server-sdk==2.4.0
 python-multipart
 openai>=1.0
 pillow
@@ -13,3 +14,4 @@ pydantic>=2.10
 requests
 python-dotenv
 fast-simplification
+pytest

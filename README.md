@@ -17,6 +17,39 @@ cp .env.example .env                             # add PayPal sandbox + OpenRout
 .venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 
+## How PayPal is used
+
+| PayPal capability | Where | How |
+| --- | --- | --- |
+| Orders v2 (create, get, capture) | `app/paypal.py`, `web/art.html` | **PayPal Server SDK** (`paypal-server-sdk`, APIMatic-generated) + JS SDK buttons with PayPal, Venmo and Pay Later |
+| Refunds | `app/paypal.py` | PayPal Server SDK (`PaymentsController`) |
+| Subscriptions — Grandparent Club | `app/paypal.py`, `web/shop.html` | PayPal Server SDK (`SubscriptionsController`) + JS SDK subscription buttons |
+| Payouts — kids' earnings and fundraiser causes | `app/money.py` | Payouts REST API (not in the Server SDK) |
+| Invoicing, transactions, disputes, shipment tracking | `app/agents.py` | **PayPal Agent Toolkit** tools called by the AI shop assistant |
+| Webhooks | `app/main.py`, `app/money.py` | signature verification + capture/refund/subscription events |
+
+### Built with the APIMatic PayPal Context Plugin
+
+The PayPal integration was written in Claude Code with APIMatic's
+[PayPal Server SDK Context Plugin](https://github.com/paypaldev/server-sdk-context-plugin-preview)
+(`npx context-plugins install https://github.com/paypaldev/server-sdk-context-plugin-preview`).
+Following its Python skills we: pinned the SDK (`paypal-server-sdk==2.4.0`), built one long-lived
+`PaypalServersdkClient` with an explicit environment, used the options-dict call shape, set the
+experience-context fields whose generated defaults differ from what we need (`PAY_NOW`,
+`NO_SHIPPING`), mapped `ApiException`/`AuthValidationException` separately, read raw `ApiResponse.text` so
+fields the models don't declare (a capture's `seller_receivable_breakdown`) survive, and tested through
+the SDK's `http_client_instance` + `http_call_back` seams (`tests/test_paypal_sdk.py`).
+
+Finding along the way: in SDK 2.4.0 the `PricingScheme` model emits `pricing_model`/`price`, which the
+live Subscriptions API rejects (it requires `fixed_price`); `create_monthly_plan` builds the plan with
+the SDK models and patches that one field.
+
+## Tests
+
+```bash
+.venv/Scripts/python -m pytest -q      # offline: SDK request shapes, error mapping, money split
+```
+
 ## License
 
 MIT
