@@ -42,7 +42,15 @@ def cut_out(img: Image.Image) -> np.ndarray:
 
     global _session
     if _session is None:
-        _session = new_session(os.environ.get("REMBG_MODEL", "u2net"), providers=["CPUExecutionProvider"])
+        import onnxruntime as ort
+
+        opts = ort.SessionOptions()
+        opts.enable_cpu_mem_arena = False  # without this the arena keeps ~250 MB after each run
+        opts.enable_mem_pattern = False
+        opts.intra_op_num_threads = int(os.environ.get("REMBG_THREADS", "2"))
+        opts.inter_op_num_threads = 1
+        _session = new_session(os.environ.get("REMBG_MODEL", "u2net"), providers=["CPUExecutionProvider"],
+                               sess_opts=opts)
     rgba = remove(img.convert("RGB"), session=_session, post_process_mask=True)
     return np.asarray(rgba)[:, :, 3] > 127
 

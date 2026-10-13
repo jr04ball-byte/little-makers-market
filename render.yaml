@@ -1,0 +1,39 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Deploy: https://render.com/deploy?repo=https://github.com/jr04ball-byte/little-makers-market
+services:
+  - type: web
+    name: little-makers-market
+    runtime: python
+    plan: 1c-2g            # 1 CPU / 2 GB: the 3D + cutout pipeline peaks around 450 MB, too tight for 512 MB
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      pip install --no-deps paypal-agent-toolkit==1.11.0
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/config
+    disk:
+      name: market-data
+      mountPath: /var/data   # SQLite database, uploaded drawings, 3D models, cutout model weights
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: LMM_DATA_DIR
+        value: /var/data
+      - key: U2NET_HOME       # keep the downloaded cutout model on the disk between deploys
+        value: /var/data/models
+      - key: REMBG_MODEL
+        value: u2netp
+      - key: SEED_DEMO        # build the two demo markets on first boot (about 10 cents of AI)
+        value: "1"
+      - key: PAYPAL_ENV
+        value: sandbox
+      - key: AI_MODEL
+        value: anthropic/claude-sonnet-5.5
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false

@@ -21,6 +21,15 @@ app = FastAPI(title="Little Makers Market")
 db.init()
 
 
+@app.on_event("startup")
+def _seed_demo_once():
+    if config.SEED_DEMO and not db.rows("SELECT id FROM shops LIMIT 1"):
+        import threading
+
+        from . import seed
+        threading.Thread(target=seed.main, name="seed-demo", daemon=True).start()
+
+
 @app.exception_handler(paypal.PayPalError)
 def _paypal_error(_: Request, e: paypal.PayPalError):
     return JSONResponse({"error": "PayPal said no", "detail": e.body}, status_code=502)

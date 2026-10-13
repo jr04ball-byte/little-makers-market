@@ -17,6 +17,14 @@ cp .env.example .env                             # add PayPal sandbox + OpenRout
 .venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 
+## Deploy to Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jr04ball-byte/little-makers-market)
+
+`render.yaml` creates one web service (1 CPU / 2 GB, `1c-2g`) with a 1 GB disk for the database and media.
+Render asks for `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `OPENROUTER_API_KEY` (and optionally
+`PAYPAL_WEBHOOK_ID`). On first boot the two demo markets are built in the background.
+
 ## How PayPal is used
 
 | PayPal capability | Where | How |

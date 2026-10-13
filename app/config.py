@@ -38,7 +38,11 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 AI_MODEL = os.environ.get("AI_MODEL", "anthropic/claude-sonnet-5.5")
 AI_FAST_MODEL = os.environ.get("AI_FAST_MODEL", "anthropic/claude-haiku-5.5")
 
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:8000").rstrip("/")
+_render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")  # set automatically on Render
+PUBLIC_URL = os.environ.get("PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL") or (
+    f"https://{_render_host}" if _render_host else "http://localhost:8000")
+PUBLIC_URL = PUBLIC_URL.rstrip("/")
+SEED_DEMO = os.environ.get("SEED_DEMO", "") == "1"  # build the demo markets on first boot
 DATA_DIR = Path(os.environ.get("LMM_DATA_DIR", ROOT / "data"))
 MEDIA_DIR = DATA_DIR / "media"
 DB_PATH = DATA_DIR / "market.db"
