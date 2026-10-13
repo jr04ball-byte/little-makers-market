@@ -11,7 +11,9 @@ An AI maker agent turns one photo of a child's drawing into a complete PayPal sh
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # macOS/Linux: .venv/bin/pip
+.venv/Scripts/pip install --no-deps paypal-agent-toolkit==1.11.0   # core toolkit only (skips its LangChain/CrewAI extras)
 cp .env.example .env                             # add PayPal sandbox + OpenRouter keys
+.venv/Scripts/python -m app.seed                 # optional: two demo markets (uses the AI, ~10 cents)
 .venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 

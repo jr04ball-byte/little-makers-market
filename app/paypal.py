@@ -68,8 +68,8 @@ def create_order(items: list[dict], *, reference_id: str, custom_id: str, descri
             "amount": {**money(total), "breakdown": {"item_total": money(total)}},
             "items": [{
                 "name": i["name"][:127],
-                "description": i.get("description", "")[:127],
-                "sku": i.get("sku", "")[:127],
+                "description": (i.get("description") or "")[:127],
+                "sku": (i.get("sku") or "")[:127],
                 "unit_amount": money(i["unit_cents"]),
                 "quantity": str(i["quantity"]),
                 "category": i.get("category", "DIGITAL_GOODS"),
@@ -111,7 +111,8 @@ def send_payouts(batch_id: str, subject: str, items: list[dict]) -> dict:
     body = {
         "sender_batch_header": {"sender_batch_id": batch_id, "email_subject": subject[:255],
                                 "email_message": "Earnings from Little Makers Market"},
-        "items": [{"recipient_type": "EMAIL", "receiver": i["receiver"], "amount": money(i["cents"]),
+        "items": [{"recipient_type": "EMAIL", "receiver": i["receiver"],
+                   "amount": {"value": f"{i['cents'] / 100:.2f}", "currency": config.CURRENCY},  # Payouts v1 uses "currency"
                    "note": i.get("note", "")[:4000], "sender_item_id": i.get("ref", "")[:63]} for i in items],
     }
     return call("POST", "/v1/payments/payouts", body, prefer_full=False)
