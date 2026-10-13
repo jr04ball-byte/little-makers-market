@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Makers Market</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
+<link rel="stylesheet" href="/static/app.css">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+</head>
+<body>
+<main class="wrap" style="padding-top:24px;padding-bottom:50px">
+  <a id="back" class="small" style="font-weight:800;text-decoration:none">← Back to the shop</a>
+  <div class="product" style="margin-top:14px">
+    <div>
+      <div id="stage">
+        <model-viewer id="mv" camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" shadow-intensity="1" exposure="1.1"
+          touch-action="pan-y" alt="3D plush of the drawing">
+          <button slot="ar-button" class="btn small sun" style="position:absolute;bottom:14px;right:14px">📱 See it in your room</button>
+        </model-viewer>
+        <img id="still" class="hidden" alt="" style="width:100%;aspect-ratio:1;object-fit:contain;border-radius:22px;background:#fff">
+      </div>
+      <div class="views" id="views"></div>
+      <p class="small muted center" style="margin-top:8px">Drag to spin the plush. On a phone, tap “See it in your room”.</p>
+    </div>
+    <div>
+      <span class="pill" id="by"></span>
+      <h1 id="title" style="font-size:clamp(1.8rem,4vw,2.6rem);margin-top:10px"></h1>
+      <p class="story" id="story"></p>
+      <div class="quirks" id="quirks"></div>
+      <h3 style="margin-top:20px">Choose what to take home</h3>
+      <div id="opts"></div>
+      <label for="note">A note for the artist (optional)</label>
+      <input id="note" maxlength="200" placeholder="Sparky is my favorite! Love, Grandma">
+      <div class="row" style="margin-top:14px"><b class="grow" style="font-size:1.3rem" id="total"></b><span class="small muted" id="cause-note"></span></div>
+      <div id="paypal-buttons"></div>
+      <p class="small muted">Sandbox demo — use a PayPal sandbox buyer account. No real money moves.</p>
+    </div>
+  </div>
+
+  <section class="card hidden" id="done" style="margin-top:28px;text-align:center">
+    <div style="font-size:3rem">🎉</div>
+    <h2>Thank you! The artist just heard the news:</h2>
+    <div id="celebrations"></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+<script>
+topbar();
+const cid = slugFromPath();
+let art;
+const label = { plush3d: '🧸 3D plush — AR + printable file', sticker: '⭐ Die-cut vinyl sticker', print: '🖼️ 8×10 art print' };
+
+function cart() {
+  return $$('#opts .opt').filter(o => $('input[type=checkbox]', o).checked)
+    .map(o => ({ product_id: o.dataset.pid, quantity: Math.max(1, +$('.qty', o).value || 1) }));
+}
+function updateTotal() {
+  const t = cart().reduce((s, i) => s + art.products.find(p => p.id === i.product_id).price_cents * i.quantity, 0);
+  $('#total').textContent = t ? 'Total ' + money(t) : 'Pick at least one item';
+  $('#paypal-buttons').style.opacity = t ? 1 : .4;
+  $('#paypal-buttons').style.pointerEvents = t ? '' : 'none';
+}
+
+(async () => {
+  art = await api('/api/creations/' + cid);
+  document.title = `${art.title} · Little Makers Market`;
+  $('#back').href = '/shop/' + art.shop.slug;
+  $('#mv').src = art.model; $('#mv').poster = art.sticker;
+  $('#by').textContent = `${art.maker.emoji || '🎨'} by ${art.maker.nickname}${art.maker.age ? ', age ' + art.maker.age : ''}`;
+  $('#title').textContent = art.title; $('#story').textContent = art.story;
+  $('#quirks').innerHTML = art.quirks.map(q => `<span class="pill sun">✨ ${esc(q)}</span>`).join('');
+  const views = [['3D', null], ['Sticker', art.sticker], ['Print', art.print], ['Original', art.drawing]];
+  $('#views').innerHTML = views.map(([n, src], i) => `<button type="button" class="${i ? '' : 'on'}" data-i="${i}" title="${n}">
+      ${src ? `<img src="${src}" alt="${n}">` : `<div style="aspect-ratio:1;display:grid;place-items:center;font-weight:800;background:var(--grape-2);border-radius:10px">🧸 3D</div>`}</button>`).join('');
+  $('#views').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#views button').forEach(x => x.classList.toggle('on', x === b));
+    const src = views[+b.dataset.i][1];
+    $('#mv').classList.toggle('hidden', !!src);
+    $('#still').classList.toggle('hidden', !src);
+    if (src) $('#still').src = src;
+  };
+  if (art.shop.kind === 'fundraiser') $('#cause-note').textContent = `💛 ${art.shop.cause_pct}% goes to ${art.shop.cause_name}`;
+  $('#opts').innerHTML = art.products.map((p, i) => `<label class="opt" data-pid="${p.id}">
+      <input type="checkbox" ${i === 0 ? 'checked' : ''}><div class="grow"><b>${label[p.kind] || esc(p.name)}</b>
+      <div class="small muted">${esc(p.description)}</div></div>
+      <input class="qty" type="number" min="1" max="20" value="1" aria-label="Quantity"><span class="price">${money(p.price_cents)}</span></label>`).join('');
+  $('#opts').oninput = updateTotal; updateTotal();
+
+  const paypal = await loadPayPal();
+  paypal.Buttons({
+    style: { shape: 'pill', layout: 'vertical', label: 'pay' },
+    createOrder: async () => (await api('/api/checkout/orders', { json: { items: cart(), message: $('#note').value } })).id,
+    onApprove: async data => {
+      const r = await api(`/api/checkout/orders/${data.orderID}/capture`, { method: 'POST' });
+      $('#celebrations').innerHTML = r.celebrations.map(c => `<div class="bubble" style="text-align:left;max-width:640px;margin:12px auto">${esc(c.line)}</div>`).join('');
+      $('#done').classList.remove('hidden'); $('#done').scrollIntoView({ behavior: 'smooth' }); confetti();
+    },
+    onError: err => toast('PayPal error — please try again'),
+  }).render('#paypal-buttons');
+})().catch(err => toast(err.message));
+</script>
+</body>
+</html>

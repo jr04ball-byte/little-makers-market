@@ -9,3 +9,4 @@ __pycache__/
 data/
 samples/puff/
 samples/contact.png
+.claude/

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard · Little Makers Market</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main class="wrap" style="padding-top:26px;padding-bottom:50px">
+  <div class="row">
+    <div class="grow"><span class="pill" id="kind"></span><h1 id="name" style="margin-top:8px">Dashboard</h1></div>
+    <a class="btn alt small" id="studio">Maker Studio</a>
+    <a class="btn alt small" id="shop">View shop ↗</a>
+    <button class="btn small sun" id="payout">💸 Pay out earnings</button>
+  </div>
+
+  <section class="stats" style="margin-top:18px" id="stats"></section>
+
+  <section class="row" style="align-items:flex-start;gap:22px;margin-top:22px">
+    <div class="card grow" style="min-width:300px;flex-basis:520px">
+      <h2>🤖 Shop assistant</h2>
+      <p class="small muted">Runs on Claude with PayPal's Agent Toolkit. Try: “Send Aunt Lisa (lisa@example.com) an invoice for 2 Sparky stickers” · “How much has Mia earned?” · “Refund the last order”.</p>
+      <div class="chat" id="chat"></div>
+      <form class="row" id="ask" style="margin-top:12px;flex-wrap:nowrap">
+        <input id="q" placeholder="Ask or tell the assistant…" autocomplete="off">
+        <button class="btn">Send</button>
+      </form>
+    </div>
+    <div class="grow" style="min-width:280px;flex-basis:340px">
+      <div class="card"><h3>Little makers</h3><div id="makers"></div></div>
+      <div class="card" style="margin-top:18px"><h3>Live activity</h3><div id="events" class="small"></div></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:22px;overflow-x:auto">
+    <h2>Orders</h2>
+    <table><thead><tr><th>When</th><th>Buyer</th><th>Items</th><th>Total</th><th>Channel</th><th>Status</th></tr></thead><tbody id="orders"></tbody></table>
+  </section>
+  <section class="card" style="margin-top:22px;overflow-x:auto">
+    <h2>Payouts</h2>
+    <table><thead><tr><th>When</th><th>PayPal batch</th><th>Recipients</th><th>Total</th><th>Status</th></tr></thead><tbody id="payouts"></tbody></table>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+<script>
+topbar();
+const slug = slugFromPath();
+const when = t => new Date(t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const history = [];
+
+async function load() {
+  const d = await api(`/api/shops/${slug}/dashboard`);
+  const s = d.shop, st = d.stats;
+  document.title = s.name + ' · Dashboard';
+  $('#name').textContent = s.name;
+  $('#kind').textContent = s.kind === 'fundraiser' ? `💛 Fundraiser · ${s.cause_pct}% to ${s.cause_name}` : '🏡 Family shop';
+  $('#studio').href = '/studio/' + slug; $('#shop').href = '/shop/' + slug;
+  $('#stats').innerHTML = [
+    ['Sales', money(st.gross_cents)], ['Orders', st.orders], ['Bought by AI agents', st.agent_orders],
+    ['Grandparent Club', st.club_members + ' members'], ...(s.kind === 'fundraiser' ? [['Raised for the cause', money(st.cause_cents)]] : []),
+  ].map(([k, v]) => `<div class="stat"><span class="small muted">${k}</span><b>${v}</b></div>`).join('');
+  $('#makers').innerHTML = d.makers.map(m => `<div style="margin:12px 0"><b>${esc(m.emoji)} ${esc(m.nickname)}</b>
+     <span class="small muted">· earned ${money(m.earned_cents)} · unpaid ${money(m.unpaid_cents)}</span>${jarsHTML(m.buckets)}</div>`).join('') || '<p class="muted">No makers yet.</p>';
+  $('#events').innerHTML = d.events.map(e => `<div style="padding:8px 0;border-bottom:1px solid var(--line)">${esc(e.text)}
+     <div class="muted">${when(e.created)}</div></div>`).join('') || '<p class="muted">Quiet so far.</p>';
+  $('#orders').innerHTML = d.orders.map(o => {
+    const items = JSON.parse(o.items || '[]');
+    return `<tr><td>${when(o.created)}</td><td>${esc(o.buyer_name || '—')}</td><td>${items.map(i => `${i.quantity}× ${esc(i.name)}`).join('<br>')}</td>
+      <td>${money(o.total_cents)}</td><td>${o.channel === 'agent' ? '🤖 ' + esc(o.agent_name || 'AI agent') : o.channel === 'assistant' ? '💬 link' : '🛒 web'}</td>
+      <td><span class="pill ${o.status === 'COMPLETED' ? 'leaf' : o.status === 'REFUNDED' ? 'tomato' : 'sun'}">${o.status}</span></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="muted">No orders yet.</td></tr>';
+  $('#payouts').innerHTML = d.payouts.map(p => `<tr><td>${when(p.created)}</td><td>${esc(p.paypal_batch_id)}</td>
+     <td>${JSON.parse(p.items).map(i => esc(i.receiver)).join('<br>')}</td><td>${money(p.total_cents)}</td><td>${esc(p.status)}</td></tr>`).join('')
+     || '<tr><td colspan="5" class="muted">No payouts yet.</td></tr>';
+}
+
+function addMsg(role, text) {
+  $('#chat').insertAdjacentHTML('beforeend', `<div class="msg ${role === 'user' ? 'me' : 'bot'}">${esc(text)}</div>`);
+  $('#chat').scrollTop = 1e9;
+}
+$('#ask').onsubmit = async e => {
+  e.preventDefault();
+  const q = $('#q').value.trim(); if (!q) return;
+  $('#q').value = ''; addMsg('user', q); history.push({ role: 'user', content: q });
+  $('#chat').insertAdjacentHTML('beforeend', '<div class="msg bot" id="typing"><span class="dots"><i></i><i></i><i></i></span></div>');
+  try {
+    const r = await api(`/api/shops/${slug}/assistant`, { json: { messages: history } });
+    $('#typing').remove();
+    r.trace.forEach(t => $('#chat').insertAdjacentHTML('beforeend', `<div class="tool">⚙️ ${esc(t.tool)}</div>`));
+    addMsg('assistant', r.reply); history.push({ role: 'assistant', content: r.reply });
+    load();
+  } catch (err) { $('#typing')?.remove(); addMsg('assistant', 'Sorry — ' + err.message); }
+};
+addMsg('assistant', "Hi! I can send invoices, make checkout links for relatives, change prices, refund orders and pay out the kids' earnings — all through PayPal.");
+$('#payout').onclick = async () => {
+  try { const r = await api(`/api/shops/${slug}/payouts`, { method: 'POST' });
+    toast(r.sent ? `Sent ${money(r.total_cents)} to ${r.recipients} recipient(s) via PayPal Payouts` : r.reason, 5000); load(); }
+  catch (err) { toast(err.message); }
+};
+load().catch(err => toast(err.message));
+setInterval(() => load().catch(() => {}), 15000);
+</script>
+</body>
+</html>

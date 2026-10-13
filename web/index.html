@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Makers Market</title>
+<meta name="description" content="Kids' drawings become plush 3D toys, stickers and prints that family can buy with PayPal.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main>
+  <section class="hero wrap">
+    <div class="row" style="align-items:flex-start;gap:36px">
+      <div class="grow" style="min-width:290px;flex-basis:440px">
+        <span class="pill sun">🧸 For families, churches, schools &amp; teams</span>
+        <h1 style="margin-top:14px">Turn the fridge art into <span class="squiggle">real things</span> family can buy.</h1>
+        <p class="lead">Snap a photo of your kid's drawing. Our AI art buddy keeps every wonky detail, turns it into a squishy 3D plush, a sticker and a framed print, and opens a PayPal shop in about a minute. Every sale fills your little maker's <b>save · spend · give</b> jars.</p>
+        <div class="row" style="margin-top:20px">
+          <a class="btn" href="#start">Open a market — free</a>
+          <a class="btn alt" id="demo-link" href="#markets">See a live shop</a>
+        </div>
+        <p class="small muted" style="margin-top:14px">Grandma pays with PayPal, Venmo or Pay Later. Her AI assistant can shop here too.</p>
+      </div>
+      <div class="hero-art grow" id="hero-art" style="min-width:280px;flex-basis:380px"></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="how" style="padding:30px 16px">
+    <h2>How it works</h2>
+    <div class="grid" style="margin-top:16px">
+      <div class="card"><div style="font-size:2rem">📸</div><h3>1. Snap the drawing</h3><p class="muted">A parent takes one photo. Kids never appear — only their art.</p></div>
+      <div class="card"><div style="font-size:2rem">🤖</div><h3>2. The art buddy asks two questions</h3><p class="muted">“What's its name? What's its superpower?” The AI writes the story and prices, and builds a plush 3D model from the exact outline.</p></div>
+      <div class="card"><div style="font-size:2rem">💳</div><h3>3. Family buys with PayPal</h3><p class="muted">One link to share. Checkout with PayPal, Venmo or Pay Later — or the monthly Grandparent Club.</p></div>
+      <div class="card"><div style="font-size:2rem">🐷</div><h3>4. The kid sees it count</h3><p class="muted">Each sale splits into save, spend and give jars toward a real goal. Fundraisers share a cut with the cause automatically.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="markets" style="padding:30px 16px">
+    <h2>Markets</h2>
+    <div class="grid" id="shops" style="margin-top:16px"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="wrap" id="start" style="padding:30px 16px">
+    <div class="card" style="max-width:640px">
+      <h2>Open a market</h2>
+      <div class="row" style="margin-bottom:6px">
+        <label class="opt grow" style="margin:0"><input type="radio" name="kind" value="family" checked> <span><b>Family shop</b><br><span class="small muted">For grandparents, aunts &amp; uncles</span></span></label>
+        <label class="opt grow" style="margin:0"><input type="radio" name="kind" value="fundraiser"> <span><b>Fundraiser</b><br><span class="small muted">Church, school or team</span></span></label>
+      </div>
+      <form id="new-shop">
+        <label for="name">Market name</label>
+        <input id="name" required maxlength="60" placeholder="The Rivera Kids' Gallery">
+        <label for="owner">Your first name</label>
+        <input id="owner" maxlength="40" placeholder="Parent or organizer">
+        <div id="fund-fields" class="hidden">
+          <label for="cause">What are you raising money for?</label>
+          <input id="cause" maxlength="80" placeholder="St. Mark's Youth Choir trip">
+          <label for="pct">Share of each sale that goes to the cause</label>
+          <select id="pct"><option>25</option><option selected>50</option><option>75</option><option>100</option></select>
+          <label for="cause-email">Cause's PayPal email (for payouts)</label>
+          <input id="cause-email" type="email" placeholder="treasurer@example.org">
+        </div>
+        <button class="btn" style="margin-top:18px">Create market →</button>
+      </form>
+    </div>
+  </section>
+</main>
+<footer class="wrap">Little Makers Market — built for the PayPal AI Hackathon. Sandbox mode: no real money moves.</footer>
+<script src="/static/app.js"></script>
+<script>
+topbar();
+$$('input[name=kind]').forEach(r => r.onchange = () => $('#fund-fields').classList.toggle('hidden', r.value !== 'fundraiser' || !r.checked));
+
+$('#new-shop').onsubmit = async e => {
+  e.preventDefault();
+  const kind = $('input[name=kind]:checked').value;
+  const body = { name: $('#name').value, kind, owner_name: $('#owner').value };
+  if (kind === 'fundraiser') Object.assign(body, { cause_name: $('#cause').value, cause_pct: +$('#pct').value, cause_email: $('#cause-email').value });
+  try { const s = await api('/api/shops', { json: body }); location.href = '/studio/' + s.slug; }
+  catch (err) { toast(err.message); }
+};
+
+(async () => {
+  const shops = await api('/api/shops');
+  $('#shops').innerHTML = shops.length ? '' : '<p class="muted">No markets yet — be the first!</p>';
+  const art = [];
+  for (const s of shops.slice(0, 9)) {
+    const d = await api('/api/shops/' + s.slug);
+    const first = d.creations[0];
+    first && art.push(...d.creations.slice(0, 3));
+    $('#shops').insertAdjacentHTML('beforeend', `<a class="card art" href="/shop/${s.slug}">
+      <div class="thumb">${first ? `<img src="${first.sticker}" alt="">` : '<div style="height:100%;display:grid;place-items:center;font-size:3rem">🖍️</div>'}</div>
+      <h3>${esc(s.name)}</h3><p class="by">${s.kind === 'fundraiser' ? '💛 Fundraiser for ' + esc(s.cause_name) : '🏡 Family shop'} · ${d.creations.length} creations</p></a>`);
+  }
+  if (shops[0]) $('#demo-link').href = '/shop/' + shops[0].slug;
+  const pos = [[0, 6, -5], [48, 0, 4], [22, 44, -2]];
+  $('#hero-art').innerHTML = art.slice(0, 3).map((c, i) => `<img src="${i === 1 ? c.print : c.sticker}" alt="${esc(c.title)}"
+      style="left:${pos[i][0]}%;top:${pos[i][1]}%;transform:rotate(${pos[i][2]}deg)">`).join('');
+})();
+</script>
+</body>
+</html>

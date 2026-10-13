@@ -12,6 +12,7 @@ CPU only (numpy, scipy, scikit-image, trimesh), so it runs on a plain web host.
 from __future__ import annotations
 
 import argparse
+import io
 from pathlib import Path
 
 import numpy as np
@@ -20,9 +21,10 @@ from PIL import Image, ImageFilter
 from scipy import ndimage
 from skimage import measure
 
-WORK_RES = 320          # size of the inflation grid (longest side, pixels)
+WORK_RES = 256          # size of the inflation grid (longest side, pixels)
 TEX_RES = 1024          # texture size baked into the .glb
 PUFF = 0.6              # how fat the plush is (cross-section height vs width)
+MAX_FACES = 30000
 MIN_HALF_THICKNESS = 2.2  # grid cells; keeps stick legs printable
 
 
@@ -97,11 +99,16 @@ def puff(drawing: Image.Image, mask: np.ndarray | None = None) -> tuple[trimesh.
     z = zs[0] + zi
     mesh = trimesh.Trimesh(np.column_stack([x, y, z]), faces[:, ::-1], process=True)
     trimesh.smoothing.filter_taubin(mesh, lamb=0.5, nu=-0.53, iterations=8)
+    if len(mesh.faces) > MAX_FACES:  # keeps the .glb light enough for phones
+        mesh = mesh.simplify_quadric_decimation(face_count=MAX_FACES)
 
     # planar projection of the drawing onto front (and mirrored onto back)
     u = np.clip(mesh.vertices[:, 0] / (gw - 1), 0, 1)
     v = np.clip(1 + mesh.vertices[:, 1] / (gh - 1), 0, 1)
     tex = bleed(tex, Image.fromarray(m.astype(np.uint8) * 255)).resize((TEX_RES, int(TEX_RES * tex.height / tex.width)))
+    buf = io.BytesIO()
+    tex.save(buf, "JPEG", quality=88)  # trimesh keeps JPEGs as JPEG inside the .glb (PNG would be ~4x bigger)
+    tex = Image.open(io.BytesIO(buf.getvalue()))
     mesh.visual = trimesh.visual.TextureVisuals(uv=np.column_stack([u, v]),
                                                 material=trimesh.visual.material.PBRMaterial(
                                                     baseColorTexture=tex, roughnessFactor=0.9, metallicFactor=0.0))

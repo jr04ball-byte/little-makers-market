@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maker Studio · Little Makers Market</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
+<link rel="stylesheet" href="/static/app.css">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+</head>
+<body>
+<main class="wrap" style="padding-top:28px;padding-bottom:40px">
+  <div class="row">
+    <div class="grow"><span class="pill" id="kind-pill"></span><h1 id="shop-name" style="margin-top:8px">Maker Studio</h1></div>
+    <a class="btn alt small" id="view-shop">View shop ↗</a>
+    <a class="btn alt small" id="view-dash">Dashboard</a>
+    <button class="btn small sun" id="copy-link">Copy shop link</button>
+  </div>
+
+  <section style="margin-top:20px">
+    <h2>Little makers</h2>
+    <div class="grid" id="makers"></div>
+    <details class="card" id="add-maker-box" style="margin-top:18px">
+      <summary style="cursor:pointer;font-weight:800">＋ Add a little maker</summary>
+      <form id="add-maker">
+        <div class="row">
+          <div class="grow"><label>Nickname (shown in the shop)</label><input id="m-nick" required maxlength="24" placeholder="Mia"></div>
+          <div style="width:110px"><label>Age</label><input id="m-age" type="number" min="2" max="17" placeholder="7"></div>
+          <div style="width:110px"><label>Emoji</label><input id="m-emoji" maxlength="4" value="🦄"></div>
+        </div>
+        <div class="row">
+          <div class="grow"><label>Saving up for…</label><input id="m-goal" maxlength="40" placeholder="a new bike"></div>
+          <div style="width:160px"><label>Goal ($)</label><input id="m-goal-amt" type="number" min="0" step="1" placeholder="120"></div>
+        </div>
+        <label>Parent's PayPal email (where earnings are paid out)</label>
+        <input id="m-email" type="email" placeholder="parent@example.com">
+        <label>How each sale is split</label>
+        <div class="row">
+          <div class="grow">🐷 Save <input id="m-save" type="number" min="0" max="100" value="50"></div>
+          <div class="grow">🛍️ Spend <input id="m-spend" type="number" min="0" max="100" value="30"></div>
+          <div class="grow">💝 Give <input id="m-give" type="number" min="0" max="100" value="20"></div>
+        </div>
+        <button class="btn" style="margin-top:16px">Add maker</button>
+      </form>
+    </details>
+  </section>
+
+  <section style="margin-top:34px" id="wizard-section">
+    <h2>Add a new creation</h2>
+    <div class="card" id="wizard">
+      <div class="steps"><span data-s="1" class="on">1 · Photo</span><span data-s="2">2 · Ask the artist</span><span data-s="3">3 · Ready to sell</span></div>
+
+      <div data-step="1">
+        <label for="w-maker">Whose art is it?</label>
+        <select id="w-maker"></select>
+        <label class="drop" for="w-photo" style="margin-top:16px;display:block">
+          <div style="font-size:2.6rem">📸</div>
+          <b>Snap or choose a photo of the drawing</b>
+          <div class="small muted">Just the paper please — no faces, names or addresses.</div>
+          <input id="w-photo" type="file" accept="image/*" capture="environment" class="hidden">
+        </label>
+        <div class="row" style="margin-top:10px" id="samples"></div>
+      </div>
+
+      <div data-step="busy" class="hidden">
+        <div class="thinking"><span class="dots"><i></i><i></i><i></i></span><span id="busy-text">Looking at the drawing…</span></div>
+        <p class="muted small" id="busy-sub">The art buddy is noticing every detail and building the plush 3D model.</p>
+      </div>
+
+      <div data-step="2" class="hidden">
+        <div class="row" style="align-items:flex-start;gap:24px">
+          <img id="w-cutout" alt="" style="width:220px;border-radius:18px;background:var(--grape-2);padding:10px">
+          <div class="grow" style="min-width:260px">
+            <div class="bubble" id="w-said"></div>
+            <div class="quirks" id="w-quirks"></div>
+            <p class="small muted">Read these to the artist and type their answers — their words become the story.</p>
+            <form id="w-answers"></form>
+          </div>
+        </div>
+      </div>
+
+      <div data-step="3" class="hidden">
+        <div class="product">
+          <div>
+            <model-viewer id="w-model" camera-controls auto-rotate ar shadow-intensity="1" exposure="1.1" alt="3D plush"></model-viewer>
+            <div class="views"><button type="button" data-v="sticker"><img id="w-sticker" alt=""></button><button type="button" data-v="print"><img id="w-print" alt=""></button></div>
+          </div>
+          <div>
+            <h2 id="w-title"></h2>
+            <p class="story" id="w-story"></p>
+            <h3 style="margin-top:18px">Products &amp; prices</h3>
+            <div id="w-products"></div>
+            <div class="row" style="margin-top:16px">
+              <button class="btn" id="w-publish">Put it in the shop 🎉</button>
+              <button class="btn alt" id="w-again" type="button">Start over</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin-top:34px">
+    <h2>Creations</h2>
+    <div class="grid" id="creations"></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+<script>
+topbar();
+const slug = slugFromPath();
+let shop, current;
+
+async function load() {
+  const d = await api(`/api/shops/${slug}?all=1`);
+  shop = d.shop;
+  document.title = `${shop.name} · Maker Studio`;
+  $('#shop-name').textContent = shop.name;
+  $('#kind-pill').textContent = shop.kind === 'fundraiser' ? `💛 Fundraiser · ${shop.cause_pct}% to ${shop.cause_name}` : '🏡 Family shop';
+  $('#view-shop').href = '/shop/' + slug; $('#view-dash').href = '/dashboard/' + slug;
+  $('#makers').innerHTML = d.makers.map(m => `<div class="card">
+      <div class="row"><div style="font-size:2.2rem">${esc(m.emoji)}</div><div class="grow"><h3 style="margin:0">${esc(m.nickname)}${m.age ? `, ${m.age}` : ''}</h3>
+      <div class="small muted">Earned ${money(m.earned_cents)}</div></div></div>
+      ${m.goal_name ? `<div class="small" style="margin:12px 0 6px"><b>Saving for ${esc(m.goal_name)}</b> · ${money(m.buckets.save)} of ${money(m.goal_cents)}</div>
+      <div class="goal"><i style="width:${Math.min(100, m.goal_cents ? 100 * m.buckets.save / m.goal_cents : 0)}%"></i></div>` : ''}
+      <div style="margin-top:12px">${jarsHTML(m.buckets)}</div></div>`).join('') || '<p class="muted">Add your first little maker below.</p>';
+  $('#add-maker-box').open = !d.makers.length;
+  $('#w-maker').innerHTML = d.makers.map(m => `<option value="${m.id}">${esc(m.emoji)} ${esc(m.nickname)}</option>`).join('');
+  $('#wizard-section').classList.toggle('hidden', !d.makers.length);
+  $('#creations').innerHTML = d.creations.map(c => `<a class="card art" href="/art/${c.id}">
+      <div class="thumb"><img src="${c.sticker}" alt=""></div><span class="badge-3d">${c.status === 'published' ? '🟢 In shop' : '✏️ Draft'}</span>
+      <h3>${esc(c.title || c.kind || 'New creation')}</h3><p class="by">by ${esc(c.maker?.nickname)}</p></a>`).join('') || '<p class="muted">Nothing yet.</p>';
+}
+
+$('#add-maker').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api(`/api/shops/${slug}/makers`, { json: { nickname: $('#m-nick').value, age: +$('#m-age').value || null, emoji: $('#m-emoji').value || '🎨',
+      goal_name: $('#m-goal').value, goal_cents: Math.round(+$('#m-goal-amt').value * 100) || 0, payout_email: $('#m-email').value,
+      save_pct: +$('#m-save').value, spend_pct: +$('#m-spend').value, give_pct: +$('#m-give').value } });
+    e.target.reset(); toast('Maker added!'); load();
+  } catch (err) { toast(err.message); }
+};
+
+function step(n) {
+  $$('#wizard [data-step]').forEach(el => el.classList.toggle('hidden', el.dataset.step !== String(n)));
+  $$('.steps span').forEach(el => el.classList.toggle('on', el.dataset.s === String(n === 'busy' ? (current ? 2 : 1) : n)));
+}
+function busy(text, sub) { $('#busy-text').textContent = text; $('#busy-sub').textContent = sub; step('busy'); }
+
+async function upload(file) {
+  const fd = new FormData();
+  fd.append('shop', slug); fd.append('maker_id', $('#w-maker').value); fd.append('photo', file);
+  busy('Looking at the drawing…', 'Noticing every wonky detail, cutting it off the paper, and puffing it into a 3D plush.');
+  try {
+    current = await api('/api/creations', { method: 'POST', body: fd });
+    const a = current.analysis;
+    $('#w-cutout').src = current.cutout;
+    $('#w-said').innerHTML = `🤖 <b>Ooh, ${esc(a.description)}</b>`;
+    $('#w-quirks').innerHTML = (a.quirks || []).map(q => `<span class="pill sun">✨ ${esc(q)}</span>`).join('');
+    $('#w-answers').innerHTML = (a.questions || []).map((q, i) => `<label>${esc(q)}</label>
+        <input name="q${i}" data-q="${esc(q)}" required ${i === 0 ? `placeholder="${esc((a.name_ideas || [])[0] || '')}"` : ''}>`).join('')
+      + '<button class="btn" style="margin-top:16px">Make it! ✨</button>';
+    step(2);
+  } catch (err) { step(1); toast(err.message, 5000); }
+}
+$('#w-photo').onchange = e => e.target.files[0] && upload(e.target.files[0]);
+
+// one-tap sample drawings for demos
+['purple-dragon', 'rainbow-cat', 'robot-friend', 'silly-monster', 'space-rocket', 'sun-turtle', 'happy-dinosaur'].forEach(n => {
+  $('#samples').insertAdjacentHTML('beforeend', `<button type="button" class="btn alt small" data-sample="${n}">
+    <img src="/static/samples/${n}.png" alt="" style="width:34px;height:34px;border-radius:8px"> ${n.replace('-', ' ')}</button>`);
+});
+$('#samples').onclick = async e => {
+  const b = e.target.closest('[data-sample]'); if (!b) return;
+  const blob = await (await fetch(`/static/samples/${b.dataset.sample}.png`)).blob();
+  upload(new File([blob], b.dataset.sample + '.png', { type: 'image/png' }));
+};
+
+$('#w-answers').onsubmit = async e => {
+  e.preventDefault();
+  const answers = Object.fromEntries($$('#w-answers input').map(i => [i.dataset.q, i.value]));
+  busy('Writing the story…', 'Turning the artist\'s answers into a picture-book story, a name, and fair prices.');
+  try { current = await api(`/api/creations/${current.id}/answers`, { json: { answers } }); showReady(); }
+  catch (err) { step(2); toast(err.message); }
+};
+
+function showReady() {
+  const c = current;
+  $('#w-model').src = c.model; $('#w-sticker').src = c.sticker; $('#w-print').src = c.print;
+  $('#w-title').textContent = c.title; $('#w-story').textContent = c.story;
+  const label = { plush3d: '🧸 3D plush (AR + printable file)', sticker: '⭐ Die-cut sticker', print: '🖼️ 8×10 art print' };
+  $('#w-products').innerHTML = c.products.map(p => `<div class="opt"><div class="grow"><b>${label[p.kind] || esc(p.name)}</b>
+      <div class="small muted">${esc(p.description)}</div></div>
+      <span>$</span><input class="qty" type="number" min="1" step="0.5" value="${(p.price_cents / 100).toFixed(2)}" data-pid="${p.id}"></div>`).join('');
+  step(3);
+}
+$('#w-products').onchange = async e => {
+  const i = e.target.closest('[data-pid]'); if (!i) return;
+  await api('/api/products/' + i.dataset.pid, { method: 'PATCH', json: { price_cents: Math.round(+i.value * 100) } });
+  toast('Price saved');
+};
+$$('.views button').forEach(b => b.onclick = () => window.open(b.querySelector('img').src));
+$('#w-publish').onclick = async () => {
+  await api(`/api/creations/${current.id}/publish`, { method: 'POST' });
+  confetti(); toast(`${current.title} is in the shop!`);
+  current = null; step(1); load();
+};
+$('#w-again').onclick = () => { current = null; step(1); };
+$('#copy-link').onclick = () => { navigator.clipboard.writeText(`${location.origin}/shop/${slug}`); toast('Shop link copied — send it to the family!'); };
+load().catch(err => toast(err.message));
+</script>
+</body>
+</html>

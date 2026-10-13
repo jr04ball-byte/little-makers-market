@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thank you · Little Makers Market</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main class="wrap" style="padding:40px 16px">
+  <section class="card center" style="max-width:720px;margin:0 auto">
+    <div style="font-size:3rem" id="icon">⏳</div>
+    <h1 id="head" style="font-size:2.2rem">Finishing your order…</h1>
+    <div id="celebrations"></div>
+    <a class="btn" id="back" href="/" style="margin-top:18px">Back to the shop</a>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+<script>
+topbar();
+// PayPal sends buyers back here as /thanks?shop=<slug>&token=<order id>&PayerID=...
+const q = new URLSearchParams(location.search);
+if (q.get('shop')) $('#back').href = '/shop/' + q.get('shop');
+(async () => {
+  const token = q.get('token');
+  if (!token) { $('#head').textContent = 'Nothing to finish here.'; $('#icon').textContent = '🤔'; return; }
+  try {
+    const r = await api(`/api/checkout/orders/${encodeURIComponent(token)}/capture`, { method: 'POST' });
+    $('#icon').textContent = '🎉'; $('#head').textContent = 'Thank you! The artist just heard the news:';
+    $('#celebrations').innerHTML = r.celebrations.map(c => `<div class="bubble" style="text-align:left">${esc(c.line)}</div>`).join('');
+    confetti();
+  } catch (err) { $('#icon').textContent = '😕'; $('#head').textContent = err.message; }
+})();
+</script>
+</body>
+</html>

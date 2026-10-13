@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
-from . import ai, config, db, media, money, paypal
+from . import agents, ai, config, db, media, money, paypal
 
 WEB = config.ROOT / "web"
 app = FastAPI(title="Little Makers Market")
@@ -275,6 +275,15 @@ def dashboard(slug: str):
             "subscriptions": db.rows("SELECT * FROM subscriptions WHERE shop_id = ? ORDER BY created DESC", s["id"]),
             "events": db.rows("SELECT * FROM events WHERE shop_id = ? ORDER BY created DESC LIMIT 50", s["id"]),
             "makers": [money.maker_with_balance(m) for m in db.rows("SELECT * FROM makers WHERE shop_id = ?", s["id"])]}
+
+
+class ChatIn(BaseModel):
+    messages: list[dict]
+
+
+@app.post("/api/shops/{slug}/assistant")
+def assistant(slug: str, body: ChatIn):
+    return agents.chat(shop_by_slug(slug), body.messages)
 
 
 # ------------------------------------------------------------------ webhooks

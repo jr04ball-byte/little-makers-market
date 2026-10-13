@@ -12,3 +12,4 @@ rembg[cpu]
 pydantic>=2.10
 requests
 python-dotenv
+fast-simplification

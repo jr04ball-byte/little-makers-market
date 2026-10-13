@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Makers Market</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main class="wrap" style="padding-top:30px;padding-bottom:40px">
+  <section class="row" style="align-items:flex-end">
+    <div class="grow" style="min-width:280px">
+      <span class="pill" id="kind"></span>
+      <h1 id="name" style="margin-top:10px"></h1>
+      <p class="lead muted" id="blurb" style="font-size:1.15rem;max-width:640px"></p>
+    </div>
+    <div class="card" id="cause-card" style="min-width:260px;max-width:340px" hidden>
+      <b id="cause-title"></b>
+      <div class="goal" style="margin:10px 0 6px"><i id="cause-bar"></i></div>
+      <div class="small muted" id="cause-sub"></div>
+    </div>
+  </section>
+
+  <section style="margin-top:20px" class="row" id="makers"></section>
+
+  <section style="margin-top:26px">
+    <div class="grid" id="art"></div>
+  </section>
+
+  <section class="card" style="margin-top:36px" id="club">
+    <div class="row" style="align-items:flex-start">
+      <div class="grow" style="min-width:260px">
+        <span class="pill leaf">💌 Grandparent Club</span>
+        <h2 style="margin-top:10px">A new creation every month</h2>
+        <p class="muted">Subscribe once and get each new 3D plush, sticker and story from these little makers, every month. Cancel anytime in PayPal.</p>
+        <p><b id="club-price"></b> / month</p>
+      </div>
+      <div style="min-width:260px;flex:0 1 340px"><div id="club-buttons"></div></div>
+    </div>
+  </section>
+  <p class="small muted center" style="margin-top:30px">🤖 AI shopping assistants: this market is agent-ready — see <a href="/agents">/agents</a>.</p>
+</main>
+<script src="/static/app.js"></script>
+<script>
+topbar();
+const slug = slugFromPath();
+(async () => {
+  const d = await api('/api/shops/' + slug);
+  const s = d.shop;
+  document.title = s.name + ' · Little Makers Market';
+  $('#name').textContent = s.name;
+  $('#kind').textContent = s.kind === 'fundraiser' ? '💛 Fundraiser' : '🏡 Family shop';
+  $('#blurb').textContent = s.blurb || (s.kind === 'fundraiser'
+    ? `Every drawing here was made by a kid in our community. ${s.cause_pct}% of each sale goes to ${s.cause_name}.`
+    : `Original art by our little makers, turned into plush 3D toys, stickers and prints. Every purchase goes into their save, spend and give jars.`);
+  if (s.kind === 'fundraiser') {
+    $('#cause-card').hidden = false;
+    $('#cause-title').textContent = '💛 ' + s.cause_name;
+    const goal = s.goal_cents || 50000;
+    $('#cause-bar').style.width = Math.min(100, 100 * d.stats.cause_cents / goal) + '%';
+    $('#cause-sub').textContent = `${money(d.stats.cause_cents)} raised of ${money(goal)} · ${d.stats.orders} orders`;
+  }
+  $('#makers').innerHTML = d.makers.map(m => `<span class="pill" style="font-size:.95rem;padding:8px 14px">${esc(m.emoji)} ${esc(m.nickname)}${m.age ? ', ' + m.age : ''}</span>`).join('');
+  $('#art').innerHTML = d.creations.map(c => {
+    const from = Math.min(...c.products.map(p => p.price_cents));
+    return `<a class="card art" href="/art/${c.id}"><div class="thumb"><img src="${c.sticker}" alt="${esc(c.title)}"></div>
+      <span class="badge-3d">🧸 3D</span><h3>${esc(c.title)}</h3><p class="by">by ${esc(c.maker?.nickname)} · from ${money(from)}</p></a>`;
+  }).join('') || '<p class="muted">New art coming soon!</p>';
+
+  $('#club-price').textContent = money(s.club_cents || 900);
+  if (!d.creations.length) { $('#club').hidden = true; return; }
+  try {
+    const [{ plan_id }, pp] = await Promise.all([api(`/api/shops/${slug}/club`, { method: 'POST' }), loadPayPalSubscriptions()]);
+    pp.Buttons({
+      style: { shape: 'pill', color: 'gold', label: 'subscribe' },
+      createSubscription: (data, actions) => actions.subscription.create({ plan_id }),
+      onApprove: async data => {
+        await api(`/api/shops/${slug}/club/joined`, { json: { subscription_id: data.subscriptionID } });
+        confetti(); toast('Welcome to the Grandparent Club! 💌', 5000);
+      },
+      onError: err => toast('PayPal error: ' + err),
+    }).render('#club-buttons');
+  } catch (err) { $('#club-buttons').innerHTML = `<p class="small muted">${esc(err.message)}</p>`; }
+})().catch(err => toast(err.message));
+</script>
+</body>
+</html>
